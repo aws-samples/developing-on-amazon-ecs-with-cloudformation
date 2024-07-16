@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: "2010-09-09"
+#------------------------------------------------------
+# Parameters
+#------------------------------------------------------
+Parameters:
+  CodeCommitRepoName:
+    Type: String
+    Description: The name of the CodeCommit repository to create.
+    Default: book-app 
+  ECRRepoName:
+    Type: String
+    Description: The name of the Elastic Container Registry to create.
+    Default: book-app
+  CodePipelineS3BucketPrefix:
+    Type: String
+    Description: The name of the S3 bucket to store the deployment code in
+    Default: codepipeline
+#------------------------------------------------------
+# Resources: codecommit and ecr repository, s3 artifact
+#------------------------------------------------------
+Resources:
+  # A CodeCommit repository to store your code
+  CodeCommitRepo:
+    Type: AWS::CodeCommit::Repository
+    Properties:
+      RepositoryName: !Ref CodeCommitRepoName
+
+  # An Elastic Container Registry to store Docker images
+  ECRRepo:
+    Type: AWS::ECR::Repository
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W79
+            reason: "not enable ScanOnPush for demo purpose"
+          - id: W28
+            reason: "use expicit name ecr repo for demo purpose"
+    Properties:
+      RepositoryName: !Ref ECRRepoName
+
+  # S3 bucket for storing templates and pipeline artifacts
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W51
+            reason: "use default bucket policy for demo purpose"
+          - id: W35
+            reason: "not enable logging for demo purpose"
+          - id: W41
+            reasons: "not enable encryption for demo purpose"
+    DeletionPolicy: Delete
+    Properties:
+      BucketName:
+       !Sub
+        - ${BucketPrefix}-${AWS::AccountId}-${AWS::Region}
+        - BucketPrefix: !Ref CodePipelineS3BucketPrefix
+
+#------------------------------------------------------
+# Outputs
+#------------------------------------------------------
+Outputs:
+  CodeCommitRepo:
+    Value: !Ref CodeCommitRepo
+    Export:
+      Name: !Sub "${AWS::StackName}-codecommit-repo"
+  ECRRepo:
+    Value: !Ref ECRRepo
+    Export:
+      Name: !Sub "${AWS::StackName}-ecr-repo"
+  S3Bucket:
+    Value: !Ref S3Bucket
+    Export:
+      Name: !Sub "${AWS::StackName}-codepipeline-bucket"

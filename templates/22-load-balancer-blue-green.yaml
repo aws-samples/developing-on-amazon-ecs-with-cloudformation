@@ -1,0 +1,110 @@
+AWSTemplateFormatVersion: "2010-09-09"
+#------------------------------------------------------
+# Parameters
+#------------------------------------------------------
+Parameters:
+  NetworkStackName:
+    Description: Stack name of the network stack
+    Type: String
+    Default: cfn-network
+
+#------------------------------------------------------
+# Resouces: load balancer, target group blue, green
+# and a listener 
+#------------------------------------------------------
+Resources:
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W52
+            reason: "not enable alb log for demo purpose" 
+    Properties:
+      Subnets:
+        - Fn::ImportValue: !Sub ${NetworkStackName}-public-subnet-1
+        - Fn::ImportValue: !Sub ${NetworkStackName}-public-subnet-2
+      SecurityGroups:
+        - Fn::ImportValue: !Sub ${NetworkStackName}-alb-sg
+
+  TargetGroupBlue:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub ${NetworkStackName}-vpc
+      Port: 80
+      Protocol: HTTP
+      TargetType: ip
+      Matcher:
+        HttpCode: 200-299
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+
+  TargetGroupGreen:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub ${NetworkStackName}-vpc
+      Port: 80
+      Protocol: HTTP
+      TargetType: ip
+      Matcher:
+        HttpCode: 200-299
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W56
+            reason: "using only HTTP for demo"
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroupBlue
+
+#------------------------------------------------------
+# Outputs
+#------------------------------------------------------
+Outputs:
+  LoadBalancer:
+    Description: Load balancer
+    Value: !Ref LoadBalancer
+    Export:
+      Name: !Sub ${AWS::StackName}-load-balancer
+  TargetGroupBlue:
+    Description: Target group blue
+    Value: !Ref TargetGroupBlue
+    Export:
+      Name: !Sub ${AWS::StackName}-target-group-blue 
+  TargetGroupGreen:
+    Description: Target group green
+    Value: !Ref TargetGroupGreen
+    Export:
+      Name: !Sub ${AWS::StackName}-target-group-green
+  TargetGroupBlueName: 
+    Description: Target group name blue
+    Value: !GetAtt TargetGroupBlue.TargetGroupName
+    Export:
+      Name: !Sub ${AWS::StackName}-target-group-blue-name
+  TargetGroupGreenName: 
+    Description: Target group name green
+    Value: !GetAtt TargetGroupGreen.TargetGroupName
+    Export:
+      Name: !Sub ${AWS::StackName}-target-group-green-name
+  ListenerArns:
+    Description: Listener ARNs
+    Value: !GetAtt Listener.ListenerArn 
+    Export:
+      Name: !Sub ${AWS::StackName}-alb-listener-arn
