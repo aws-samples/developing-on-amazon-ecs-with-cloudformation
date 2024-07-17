@@ -5,6 +5,6 @@ Resources:
       Properties:
         TaskDefinition: <TASK_DEFINITION>
         LoadBalancerInfo:
-          ContainerName: 'book-container'
+          ContainerName: 'book-app'
           ContainerPort: 80 
         PlatformVersion: 'LATEST'
