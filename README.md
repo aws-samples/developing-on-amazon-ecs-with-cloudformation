@@ -17,7 +17,7 @@ This sample project shows how to getting started with developing on Amazon ECS u
 
 The sample consists of CloudFormation templates and a simple web application. Below is detailed project structure:
 
-```
+```go
 |--book-app
    |--appspec.yaml
    |--Dockerfile
@@ -33,7 +33,7 @@ The sample consists of CloudFormation templates and a simple web application. Be
    |--22-load-balancer-blue-green.yaml
    |--23-codecommit-ecr.yaml
    |--25-service-book-blue-green.yaml
-   |--25-codepipeline-blue-green.yaml
+   |--26-codepipeline-blue-green.yaml
 |--run.sh
 |--docs
 |--README.md
