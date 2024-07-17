@@ -34,8 +34,6 @@ The sample consists of CloudFormation templates and a simple web application. Be
    |--23-codecommit-ecr.yaml
    |--25-service-book-blue-green.yaml
    |--26-codepipeline-blue-green.yaml
-|--run.sh
-|--docs
 |--README.md
 ```
 
