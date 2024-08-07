@@ -3,6 +3,22 @@ AWSTemplateFormatVersion: "2010-09-09"
 # Parameters
 #------------------------------------------------------
 Parameters:
+  GitHubConnectionId:
+    Type: String
+    Description: The ARN of the connection to GitHub
+    Default: <GITHUB_CONNECTION_ID>
+  GitHubRepoOwner:
+    Type: String
+    Description: The owner of the GitHub repository
+    Default: <GITHUB_OWNER>
+  GitHubRepoName:
+    Type: String
+    Description: The name of the GitHub repository to use
+    Default: <GITHUB_REPO_NAME>
+  GitHubArtifactOutput:
+    Type: String
+    Description: The name of the CodeBuild artifact output
+    Default: github-artifact
   CodePipelineS3BucketPrefix:
     Type: String
     Description: The name of the S3 bucket to store the deployment code in
@@ -15,10 +31,6 @@ Parameters:
     Type: String
     Description: The name of the ECR repository to store the deployment image in
     Default: book-app
-  CodeCommitRepoName:
-    Type: String
-    Description: The name of the CodeCommit repository to use
-    Default: book-app
   EcsClusterName: 
     Type: String
     Description: The name of the ECS cluster
@@ -27,18 +39,14 @@ Parameters:
     Type: String
     Description: The name of the ECS service
     Default: service-book
-  CodeCommitArtifactOutput:
-    Type: String
-    Description: The name of the CodeBuild artifact output
-    Default: codecommit-artifact-standard
-  CodeBuildArtifactOutput:
-    Type: String
-    Description: The name of the CodeBuild artifact output
-    Default: codebuild-artifact-standard
   CodePipelineName:
     Type: String
     Description: The name of the CodePipeline
     Default: pipeline-standard
+  CodeBuildArtifactOutput:
+    Type: String
+    Description: The name of the CodeBuild artifact output
+    Default: codebuild-artifact
 Resources:
   #------------------------------------------------------
   # IAM role for codedpipeline
@@ -73,18 +81,6 @@ Resources:
                                 ]
                             }
                         }
-                    },
-                    {
-                        "Action": [
-                            "codecommit:CancelUploadArchive",
-                            "codecommit:GetBranch",
-                            "codecommit:GetCommit",
-                            "codecommit:GetRepository",
-                            "codecommit:GetUploadArchiveStatus",
-                            "codecommit:UploadArchive"
-                        ],
-                        "Resource": "*",
-                        "Effect": "Allow"
                     },
                     {
                         "Action": [
@@ -337,11 +333,7 @@ Resources:
           Status: ENABLED
           GroupName: /aws/codebuild/debug
       Source:
-        Type: CODECOMMIT
-        Location:
-          !Sub 
-            - https://git-codecommit.${AWS::Region}.amazonaws.com/v1/repos/${EcrRepoName}
-            - EcrRepoName: !Ref EcrRepoName
+        Type: NO_SOURCE 
         BuildSpec: !Sub
         - |
           version: 0.2
@@ -397,17 +389,25 @@ Resources:
       Stages:
         - Name: Source
           Actions:
-            - Name: CodeCommitSource
+            - Name: GitHubSource
               ActionTypeId:
                 Owner: AWS
                 Category: Source
                 Version: '1'
-                Provider: CodeCommit
+                Provider: CodeStarSourceConnection 
               Configuration:
-                RepositoryName: !Ref CodeCommitRepoName
+                ConnectionArn:
+                  Fn::Sub: 
+                    - arn:${AWS::Partition}:codeconnections:${AWS::Region}:${AWS::AccountId}:connection/${GitHubConnectionId}
+                    - GitHubConnectionId: !Ref GitHubConnectionId 
+                FullRepositoryId: 
+                  Fn::Sub:
+                    - ${Owner}/${RepoName}
+                    - Owner: !Ref GitHubRepoOwner
+                      RepoName: !Ref GitHubRepoName
                 BranchName: main
               OutputArtifacts:
-                - Name: !Ref CodeCommitArtifactOutput
+                - Name: !Ref GitHubArtifactOutput
         - Name: Build
           Actions:
             - Name: CodeBuild
@@ -419,9 +419,9 @@ Resources:
               RunOrder: 1
               Configuration:
                 ProjectName: !Ref CodeBuildProject
-                PrimarySource: !Ref CodeCommitArtifactOutput
+                PrimarySource: !Ref GitHubArtifactOutput
               InputArtifacts:
-                - Name: !Ref CodeCommitArtifactOutput
+                - Name: !Ref GitHubArtifactOutput
               OutputArtifacts:
                 - Name: !Ref CodeBuildArtifactOutput
         - Name: Deploy
