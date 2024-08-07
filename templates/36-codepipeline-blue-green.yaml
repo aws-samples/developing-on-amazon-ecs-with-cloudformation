@@ -1,0 +1,567 @@
+AWSTemplateFormatVersion: "2010-09-09"
+#------------------------------------------------------
+# Parameters
+#------------------------------------------------------
+Parameters:
+  GitHubConnectionId:
+    Type: String
+    Description: The ARN of the connection to GitHub
+    Default: <GITHUB_CONNECTION_ID>
+  GitHubRepoOwner:
+    Type: String
+    Description: The owner of the GitHub repository
+    Default: <GITHUB_OWNER>
+  GitHubRepoName:
+    Type: String
+    Description: The name of the GitHub repository to use
+    Default: <GITHUB_REPO_NAME>
+  GitHubArtifactOutput:
+    Type: String
+    Description: The name of the CodeBuild artifact output
+    Default: github-artifact
+  CodePipelineS3BucketPrefix:
+    Type: String
+    Description: The name of the S3 bucket to store the deployment code in
+    Default: codepipeline
+  EcrRepoName:
+    Type: String
+    Description: The name of the ECR repository to store the deployment image in
+    Default: book-app
+  EcsClusterName: 
+    Type: String
+    Description: The name of the ECS cluster
+    Default: demo
+  ServiceName: 
+    Type: String
+    Description: The name of the ECS service
+    Default: service-book-blue-green
+  AlbStackName:
+    Type: String
+    Description: The name of the ALB stack
+    Default: cfn-alb-blue-green
+  CodeBuildProjectName:
+    Type: String
+    Description: CodeBuild project name
+    Default: code-build-blue-green
+  CodeBuildArtifactOutput:
+    Type: String
+    Description: The name of the CodeBuild artifact output
+    Default: codebuild-artifact
+  CodeDeployAppName:
+    Type: String
+    Description: The name of the CodeDeploy application
+    Default: blue-green-deploy-app
+  DeploymentGroupName:
+    Type: String
+    Description: The name of the Deployment Group
+    Default: blue-green-deploy-group
+  CodePipelineName:
+    Type: String
+    Description: The name of the CodePipeline
+    Default: pipeline-blue-green
+
+Resources:
+  #------------------------------------------------------
+  # IAM role for codedpipeline
+  #------------------------------------------------------
+  RoleForCodePipeline:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+      Policies:
+        - PolicyName: !Sub ${AWS::StackName}-CodePipelinePolicyBlueGreen
+          PolicyDocument: |
+            {
+                "Statement": [
+                    {
+                        "Action": [
+                            "iam:PassRole"
+                        ],
+                        "Resource": "*",
+                        "Effect": "Allow",
+                        "Condition": {
+                            "StringEqualsIfExists": {
+                                "iam:PassedToService": [
+                                    "cloudformation.amazonaws.com",
+                                    "elasticbeanstalk.amazonaws.com",
+                                    "ec2.amazonaws.com",
+                                    "ecs-tasks.amazonaws.com"
+                                ]
+                            }
+                        }
+                    },
+                    {
+                      "Action": ["ecr:*"],
+                      "Resource": "*",
+                      "Effect": "Allow"
+                    },
+                    {
+                        "Action": [
+                            "codedeploy:CreateDeployment",
+                            "codedeploy:GetApplication",
+                            "codedeploy:GetApplicationRevision",
+                            "codedeploy:GetDeployment",
+                            "codedeploy:GetDeploymentConfig",
+                            "codedeploy:RegisterApplicationRevision"
+                        ],
+                        "Resource": "*",
+                        "Effect": "Allow"
+                    },
+                    {
+                        "Action": [
+                            "codestar-connections:UseConnection"
+                        ],
+                        "Resource": "*",
+                        "Effect": "Allow"
+                    },
+                    {
+                        "Action": [
+                            "elasticbeanstalk:*",
+                            "ec2:*",
+                            "elasticloadbalancing:*",
+                            "autoscaling:*",
+                            "cloudwatch:*",
+                            "s3:*",
+                            "sns:*",
+                            "cloudformation:*",
+                            "rds:*",
+                            "sqs:*",
+                            "ecs:*"
+                        ],
+                        "Resource": "*",
+                        "Effect": "Allow"
+                    },
+                    {
+                        "Action": [
+                            "lambda:InvokeFunction",
+                            "lambda:ListFunctions"
+                        ],
+                        "Resource": "*",
+                        "Effect": "Allow"
+                    },
+                    {
+                        "Action": [
+                            "opsworks:CreateDeployment",
+                            "opsworks:DescribeApps",
+                            "opsworks:DescribeCommands",
+                            "opsworks:DescribeDeployments",
+                            "opsworks:DescribeInstances",
+                            "opsworks:DescribeStacks",
+                            "opsworks:UpdateApp",
+                            "opsworks:UpdateStack"
+                        ],
+                        "Resource": "*",
+                        "Effect": "Allow"
+                    },
+                    {
+                        "Action": [
+                            "cloudformation:CreateStack",
+                            "cloudformation:DeleteStack",
+                            "cloudformation:DescribeStacks",
+                            "cloudformation:UpdateStack",
+                            "cloudformation:CreateChangeSet",
+                            "cloudformation:DeleteChangeSet",
+                            "cloudformation:DescribeChangeSet",
+                            "cloudformation:ExecuteChangeSet",
+                            "cloudformation:SetStackPolicy",
+                            "cloudformation:ValidateTemplate"
+                        ],
+                        "Resource": "*",
+                        "Effect": "Allow"
+                    },
+                    {
+                        "Action": [
+                            "codebuild:BatchGetBuilds",
+                            "codebuild:StartBuild",
+                            "codebuild:BatchGetBuildBatches",
+                            "codebuild:StartBuildBatch"
+                        ],
+                        "Resource": "*",
+                        "Effect": "Allow"
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "devicefarm:ListProjects",
+                            "devicefarm:ListDevicePools",
+                            "devicefarm:GetRun",
+                            "devicefarm:GetUpload",
+                            "devicefarm:CreateUpload",
+                            "devicefarm:ScheduleRun"
+                        ],
+                        "Resource": "*"
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "servicecatalog:ListProvisioningArtifacts",
+                            "servicecatalog:CreateProvisioningArtifact",
+                            "servicecatalog:DescribeProvisioningArtifact",
+                            "servicecatalog:DeleteProvisioningArtifact",
+                            "servicecatalog:UpdateProduct"
+                        ],
+                        "Resource": "*"
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "cloudformation:ValidateTemplate"
+                        ],
+                        "Resource": "*"
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "ecr:DescribeImages"
+                        ],
+                        "Resource": "*"
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "states:DescribeExecution",
+                            "states:DescribeStateMachine",
+                            "states:StartExecution"
+                        ],
+                        "Resource": "*"
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "appconfig:StartDeployment",
+                            "appconfig:StopDeployment",
+                            "appconfig:GetDeployment"
+                        ],
+                        "Resource": "*"
+                    }
+                ],
+                "Version": "2012-10-17"
+            }
+ 
+  #------------------------------------------------------
+  # IAM role for codebuild 
+  #------------------------------------------------------
+  RoleForCodeBuild:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+      Policies:
+        - PolicyName: !Sub ${AWS::StackName}-CodeBuildPolicyBlueGreen
+          PolicyDocument: !Sub 
+          - |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                  {
+                      "Effect": "Allow",
+                      "Resource": [
+                          "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/debug",
+                          "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/debug:*"
+                      ],
+                      "Action": [
+                          "logs:CreateLogGroup",
+                          "logs:CreateLogStream",
+                          "logs:PutLogEvents"
+                      ]
+                  },
+                  {
+                      "Effect": "Allow",
+                      "Resource": [
+                          "arn:${AWS::Partition}:s3:::${CodePipelineS3BucketPrefix}-${AWS::AccountId}-${AWS::Region}/*"
+                      ],
+                      "Action": [
+                          "s3:PutObject",
+                          "s3:GetObject",
+                          "s3:GetObjectVersion",
+                          "s3:GetBucketAcl",
+                          "s3:GetBucketLocation"
+                      ]
+                  },
+                  {
+                      "Effect": "Allow",
+                      "Action": [
+                          "codebuild:CreateReportGroup",
+                          "codebuild:CreateReport",
+                          "codebuild:UpdateReport",
+                          "codebuild:BatchPutTestCases",
+                          "codebuild:BatchPutCodeCoverages"
+                      ],
+                      "Resource": [
+                          "arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:report-group/debug-*"
+                      ]
+                  },
+                  {
+                    "Action": ["ecr:*"],
+                    "Resource": "*",
+                    "Effect": "Allow"
+                  }
+              ]
+            }
+          - CodePipelineS3BucketPrefix: !Ref CodePipelineS3BucketPrefix 
+
+  #------------------------------------------------------
+  # IAM role for codedeploy 
+  #------------------------------------------------------
+  RoleForCodeDeploy:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: codedeploy.amazonaws.com
+      Policies:
+        - PolicyName: !Sub ${AWS::StackName}-CodeDeployPolicyBlueGreen 
+          PolicyDocument: |
+            {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Action": [
+                            "ecs:DescribeServices",
+                            "ecs:CreateTaskSet",
+                            "ecs:UpdateServicePrimaryTaskSet",
+                            "ecs:DeleteTaskSet",
+                            "elasticloadbalancing:DescribeTargetGroups",
+                            "elasticloadbalancing:DescribeListeners",
+                            "elasticloadbalancing:ModifyListener",
+                            "elasticloadbalancing:DescribeRules",
+                            "elasticloadbalancing:ModifyRule",
+                            "lambda:InvokeFunction",
+                            "cloudwatch:DescribeAlarms",
+                            "sns:Publish",
+                            "s3:GetObject",
+                            "s3:GetObjectVersion"
+                        ],
+                        "Resource": "*",
+                        "Effect": "Allow"
+                    },
+                    {
+                        "Action": [
+                            "iam:PassRole"
+                        ],
+                        "Effect": "Allow",
+                        "Resource": "*",
+                        "Condition": {
+                            "StringLike": {
+                                "iam:PassedToService": [
+                                    "ecs-tasks.amazonaws.com"
+                                ]
+                            }
+                        }
+                    }
+                ]
+            }
+
+  #------------------------------------------------------
+  # CodeBuild project 
+  #------------------------------------------------------
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W32
+            reason: "not enable encryption for demo purpose"
+    Properties:
+      Name: !Ref CodeBuildProjectName 
+      ServiceRole: !Ref RoleForCodeBuild
+      Artifacts:
+        Type: S3
+        Packaging: NONE
+        Location: 
+          !Sub
+            - ${CodePipelineS3BucketPrefix}-${AWS::AccountId}-${AWS::Region}
+            - CodePipelineS3BucketPrefix: !Ref CodePipelineS3BucketPrefix
+      Environment:
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:5.0
+        ComputeType: BUILD_GENERAL1_SMALL
+        PrivilegedMode: false
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: /aws/codebuild/debug
+      Source:
+        Type: NO_SOURCE 
+        BuildSpec: !Sub
+        - |
+          version: 0.2
+          env: 
+            shell: bash
+            variables:
+              REPO_NAME: ${EcrRepoName}
+              CODEBUILD_RESOLVED_SOURCE_VERSION: $CODEBUILD_RESOLVED_SOURCE_VERSION
+              TAG_NAME: "latest"
+          phases:
+            pre_build:
+              commands:
+                - export TAG_NAME=$(date +%s)
+            build: 
+              commands:
+                - docker build -t $REPO_NAME:$CODEBUILD_RESOLVED_SOURCE_VERSION-$TAG_NAME .
+                - docker tag $REPO_NAME:$CODEBUILD_RESOLVED_SOURCE_VERSION-$TAG_NAME ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/$REPO_NAME:$CODEBUILD_RESOLVED_SOURCE_VERSION-$TAG_NAME
+                - printf '{"ImageURI":"%s"}' ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EcrRepoName}:$CODEBUILD_RESOLVED_SOURCE_VERSION-$TAG_NAME > imageDetail.json
+                - sed -i 's/<ACCOUNT_ID>/${AWS::AccountId}/g' taskdef.json
+                - cat imageDetail.json
+                - cat taskdef.json 
+                - cat appspec.yaml
+            post_build:
+              commands:
+                - aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+                - docker push ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/$REPO_NAME:$CODEBUILD_RESOLVED_SOURCE_VERSION-$TAG_NAME
+          artifacts:
+            files:
+              - imageDetail.json
+              - taskdef.json
+              - appspec.yaml
+            name: ${CodeBuildArtifactOutput}
+        - CodeBuildArtifactOutput: !Ref CodeBuildArtifactOutput
+          EcrRepoName: !Ref EcrRepoName
+      Cache:
+        Type: NO_CACHE
+      Tags:
+        - Key: name
+          Value: !Ref CodeBuildProjectName 
+
+  #------------------------------------------------------
+  # CodeDeployApplication
+  #------------------------------------------------------
+  CodeDeployApplication:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ApplicationName: !Ref CodeDeployAppName
+      ComputePlatform: ECS
+
+  #------------------------------------------------------
+  # Deploy DeploymentGroup
+  #------------------------------------------------------
+  Deploy:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "ues explicit name for deployment group for demo purpose"
+    Properties:
+      ApplicationName: !Ref CodeDeployAppName
+      ServiceRoleArn: !GetAtt [ RoleForCodeDeploy, Arn ]
+      AlarmConfiguration:
+        Enabled: false
+      AutoRollbackConfiguration:
+        Enabled: false
+      DeploymentConfigName: CodeDeployDefault.ECSAllAtOnce
+      DeploymentGroupName: !Ref DeploymentGroupName
+      DeploymentStyle: 
+        DeploymentOption: WITH_TRAFFIC_CONTROL
+        DeploymentType: BLUE_GREEN
+      BlueGreenDeploymentConfiguration: 
+        DeploymentReadyOption: 
+          ActionOnTimeout: CONTINUE_DEPLOYMENT
+          WaitTimeInMinutes: 0
+        TerminateBlueInstancesOnDeploymentSuccess:
+          Action: TERMINATE
+          TerminationWaitTimeInMinutes: 5
+      ECSServices:
+        - ServiceName: !Ref ServiceName
+          ClusterName: !Ref EcsClusterName
+      LoadBalancerInfo:
+        TargetGroupPairInfoList:
+          - ProdTrafficRoute:
+              ListenerArns:
+                - !ImportValue 
+                   Fn::Sub: ${AlbStackName}-alb-listener-arn 
+            TargetGroups:
+              - Name: 
+                  !ImportValue 
+                   Fn::Sub: ${AlbStackName}-target-group-blue-name
+              - Name: 
+                  !ImportValue 
+                   Fn::Sub: ${AlbStackName}-target-group-green-name
+
+  #------------------------------------------------------
+  # CodePipeline 
+  #------------------------------------------------------
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Ref CodePipelineName
+      # ExecutionMode: SUPERSEDED 
+      RoleArn: 
+        Fn::GetAtt: 
+        - RoleForCodePipeline
+        - Arn
+      ArtifactStore:
+        Type: S3
+        Location:
+          !Sub 
+            - ${CodePipelineS3BucketPrefix}-${AWS::AccountId}-${AWS::Region}
+            - CodePipelineS3BucketPrefix: !Ref CodePipelineS3BucketPrefix  
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: GitHubSource
+              ActionTypeId:
+                Owner: AWS
+                Category: Source
+                Version: '1'
+                Provider: CodeStarSourceConnection 
+              Configuration:
+                ConnectionArn:
+                  Fn::Sub: 
+                    - arn:${AWS::Partition}:codeconnections:${AWS::Region}:${AWS::AccountId}:connection/${GitHubConnectionId}
+                    - GitHubConnectionId: !Ref GitHubConnectionId 
+                FullRepositoryId: 
+                  Fn::Sub:
+                    - ${Owner}/${RepoName}
+                    - Owner: !Ref GitHubRepoOwner
+                      RepoName: !Ref GitHubRepoName
+                BranchName: main
+              OutputArtifacts:
+                - Name: !Ref GitHubArtifactOutput
+        - Name: Build
+          Actions:
+            - Name: CodeBuild
+              ActionTypeId:
+                   Owner: AWS
+                   Category: Build
+                   Version: '1'
+                   Provider: CodeBuild
+              RunOrder: 1
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+                PrimarySource: !Ref GitHubArtifactOutput 
+              InputArtifacts:
+                - Name: !Ref GitHubArtifactOutput
+              OutputArtifacts:
+                - Name: !Ref CodeBuildArtifactOutput
+        - Name: Deploy
+          Actions:
+            - Name: Deploy
+              ActionTypeId:
+                Owner: AWS
+                Category: Deploy
+                Version: '1'
+                Provider: CodeDeployToECS
+              Configuration:
+                AppSpecTemplateArtifact: !Ref CodeBuildArtifactOutput 
+                ApplicationName: !Ref CodeDeployAppName
+                DeploymentGroupName: !Ref DeploymentGroupName
+                Image1ArtifactName: !Ref CodeBuildArtifactOutput 
+                Image1ContainerName: IMAGE1_NAME 
+                TaskDefinitionTemplatePath: taskdef.json
+                AppSpecTemplatePath: appspec.yaml
+                TaskDefinitionTemplateArtifact: !Ref CodeBuildArtifactOutput
+              InputArtifacts:
+                - Name: !Ref CodeBuildArtifactOutput
