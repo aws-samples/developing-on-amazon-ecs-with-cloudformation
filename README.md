@@ -133,6 +133,3 @@ aws cloudformation create-stack \
  --template-body file://26-codepipeline-blue-green.yaml \
  --capabilities CAPABILITY_NAMED_IAM
 ```
-- [setup amazon ecs workloads for prometheus metric](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/ContainerInsights-Prometheus.html)
-
-- [sample nginx workload for amazon ecs](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/ContainerInsights-Prometheus-Setup-nginx-ecs.html)
