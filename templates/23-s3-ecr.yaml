@@ -27,6 +27,7 @@ Resources:
             reason: "use expicit name ecr repo for demo purpose"
     Properties:
       RepositoryName: !Ref ECRRepoName
+      EmptyOnDelete: true
 
   # S3 bucket for storing templates and pipeline artifacts
   S3Bucket:
